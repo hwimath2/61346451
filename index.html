@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>큰 수 찾기</title>
+    <style>
+        body {
+            text-align: center;
+            font-family: 'Arial', sans-serif;
+            background-color: #f0f8ff;
+            margin: 0;
+            padding: 0;
+        }
+        #gameTitle {
+            font-size: 4em;
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #76c7c0;
+            color: white;
+        }
+        #nameInputContainer {
+            margin: 20px;
+        }
+        #scoreBoard {
+            font-size: 2.4em;
+            margin: 10px;
+        }
+        #energyBarContainer {
+            width: 80%;
+            height: 30px;
+            background-color: #ddd;
+            margin: 20px auto;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+        #energyBar {
+            width: 100%;
+            height: 100%;
+            background-color: #76c7c0;
+            transition: width 0.1s linear;
+        }
+        #questionDisplay {
+            font-size: 6em;
+            margin: 50px;
+        }
+        #buttonsContainer {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .answerButton {
+            width: 250px;
+            height: 100px;
+            margin: 20px;
+            font-size: 2em;
+            cursor: pointer;
+            background-color: #fff;
+            border: 2px solid #76c7c0;
+            border-radius: 10px;
+            transition: background-color 0.2s;
+        }
+        .answerButton:hover {
+            background-color: #e0f7fa;
+        }
+        #resultMessage {
+            font-size: 3em;
+            margin: 20px;
+            height: 30px;
+        }
+        #finalScore {
+            font-size: 4em;
+            margin: 50px;
+            color: #d32f2f;
+        }
+        #startButton, #nextButton, #sendButton {
+            font-size: 2em;
+            padding: 15px 30px;
+            margin: 20px;
+            cursor: pointer;
+            background-color: #76c7c0;
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+        }
+        #startButton:hover, #nextButton:hover, #sendButton:hover {
+            background-color: #64b5f6;
+        }
+        #watermark {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            font-size: 2em;
+            color: rgba(0, 0, 0, 0.3);
+            user-select: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="gameTitle">큰 수 찾기</div>
+    
+    <div id="nameInputContainer">
+       <input type="text" id="userName" placeholder="이름을 입력하세요">
+    </div>
+    
+    <div id="scoreBoard">점수: <span id="score">0</span> | 틀린 횟수: <span id="mistakes">0</span>/3</div>
+    
+    <div id="energyBarContainer">
+        <div id="energyBar"></div>
+    </div>
+    
+    <div id="questionDisplay">어느 식의 결과가 더 클까요?</div>
+    
+    <div id="buttonsContainer"></div>
+    
+    <div id="resultMessage"></div>
+    
+    <div id="finalScore"></div>
+    
+    <button id="startButton">게임 시작하기</button>
+    <button id="nextButton" style="display:none;">다음 문제</button>
+    
+    <div id="response"></div>
+    
+    <!-- 워터마크 추가 -->
+    <div id="watermark">휘매쓰</div>
+
+    <script>
+        const totalMistakesAllowed = 3;
+        let score = 0;
+        let mistakes = 0;
+        let stage = 1;
+        let timeLimit = 11250; // 제한 시간 (11.25초)
+        let energyBarInterval;
+        let timeRemaining;
+        let timer;
+        let correctAnswerIndex = 0;
+        let playerName = "";
+        let startTime = null;
+
+        const scoreElement = document.getElementById('score');
+        const mistakesElement = document.getElementById('mistakes');
+        const resultMessage = document.getElementById('resultMessage');
+        const finalScore = document.getElementById('finalScore');
+        const startButton = document.getElementById('startButton');
+        const nextButton = document.getElementById('nextButton');
+        const energyBar = document.getElementById('energyBar');
+        const buttonsContainer = document.getElementById('buttonsContainer');
+        const questionDisplay = document.getElementById('questionDisplay');
+
+        startButton.addEventListener('click', startGame);
+        nextButton.addEventListener('click', function() {
+            resultMessage.textContent = '';
+            nextButton.style.display = 'none';
+            nextStage();
+        });
+
+        function startGame() {
+            playerName = document.getElementById('userName').value.trim();
+            if (!playerName) {
+                alert("이름을 입력하세요!");
+                return;
+            }
+            score = 0;
+            mistakes = 0;
+            stage = 1;
+            timeLimit = 11250; // 초기 제한 시간 재설정
+            finalScore.textContent = '';
+            resultMessage.textContent = '';
+            startButton.style.display = 'none';
+            document.getElementById('nameInputContainer').style.display = 'none';
+            updateScoreBoard();
+            startTime = Date.now();
+            nextStage();
+        }
+
+        function nextStage() {
+            timeRemaining = timeLimit;
+            updateEnergyBar();
+            generateQuestion();
+            startTimer();
+        }
+
+        function generateRandomExpression() {
+            const isAddition = Math.random() > 0.5;
+            const num1 = Math.floor(Math.random() * 10) + 1;
+            const num2 = Math.floor(Math.random() * 10) + 1;
+
+            if (isAddition) {
+                return { expression: `${num1} + ${num2}`, result: num1 + num2 };
+            } else {
+                const maxNum = Math.max(num1, num2);
+                const minNum = Math.min(num1, num2);
+                return { expression: `${maxNum} - ${minNum}`, result: maxNum - minNum };
+            }
+        }
+
+        function generateQuestion() {
+            let expression1, expression2, result1, result2;
+            
+            do {
+                const exp1 = generateRandomExpression();
+                const exp2 = generateRandomExpression();
+                expression1 = exp1.expression;
+                result1 = exp1.result;
+                expression2 = exp2.expression;
+                result2 = exp2.result;
+            } while (Math.abs(result1 - result2) > 3 || result1 === result2);
+
+            correctAnswerIndex = result1 > result2 ? 0 : 1;
+            displayChoices(expression1, expression2);
+        }
+
+        function displayChoices(expression1, expression2) {
+            buttonsContainer.innerHTML = '';
+            const button1 = createButton(expression1, 0);
+            const button2 = createButton(expression2, 1);
+            buttonsContainer.appendChild(button1);
+            buttonsContainer.appendChild(button2);
+        }
+
+        function createButton(expression, index) {
+            const btn = document.createElement('button');
+            btn.classList.add('answerButton');
+            btn.textContent = expression;
+            btn.addEventListener('click', () => checkAnswer(index));
+            return btn;
+        }
+
+        function checkAnswer(selectedIndex) {
+            clearTimeout(timer);
+            clearInterval(energyBarInterval);
+
+            if (selectedIndex === correctAnswerIndex) {
+                score += 10;
+                resultMessage.style.color = 'green';
+                resultMessage.textContent = '정답입니다!';
+                stage++;
+                timeLimit *= 0.98;
+            } else {
+                mistakes++;
+                resultMessage.style.color = 'red';
+                resultMessage.textContent = '오답입니다!';
+                updateScoreBoard();
+                if (mistakes >= totalMistakesAllowed) {
+                    endGame();
+                    return;
+                }
+            }
+            // 정답/오답 후 "다음 문제" 버튼 보이기
+            nextButton.style.display = 'inline-block';
+        }
+
+        function startTimer() {
+            timer = setTimeout(() => {
+                mistakes++;
+                resultMessage.style.color = 'red';
+                resultMessage.textContent = '시간 초과!';
+                updateScoreBoard();
+                if (mistakes >= totalMistakesAllowed) {
+                    endGame();
+                    return;
+                }
+                stage++;
+                timeLimit *= 0.98;
+                nextButton.style.display = 'inline-block';
+            }, timeLimit);
+
+            energyBarInterval = setInterval(() => {
+                timeRemaining -= 50;
+                updateEnergyBar();
+                if (timeRemaining <= 0) {
+                    clearInterval(energyBarInterval);
+                }
+            }, 50);
+        }
+
+        function updateEnergyBar() {
+            const width = (timeRemaining / timeLimit) * 100;
+            energyBar.style.width = width + '%';
+            if (width <= 0) {
+                energyBar.style.width = '0%';
+            }
+        }
+
+        function updateScoreBoard() {
+            scoreElement.textContent = score;
+            mistakesElement.textContent = mistakes;
+        }
+
+        function endGame() {
+            clearTimeout(timer);
+            clearInterval(energyBarInterval);
+            buttonsContainer.innerHTML = '';
+            resultMessage.textContent = '';
+            const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+            finalScore.textContent = `게임 종료! 최종 점수: ${score}점, 경과시간: ${elapsedTime}초`;
+            startButton.textContent = '다시 시작하기';
+            startButton.style.display = 'inline-block';
+            showSendButton(score, elapsedTime);
+        }
+
+        function showSendButton(score, elapsedTime) {
+            let sendButton = document.getElementById('sendButton');
+            if (!sendButton) {
+                sendButton = document.createElement('button');
+                sendButton.id = 'sendButton';
+                sendButton.textContent = '전송하기';
+                document.body.appendChild(sendButton);
+                sendButton.addEventListener('click', function() {
+                    saveData("큰 수 찾기", playerName, score, elapsedTime);
+                });
+            }
+            sendButton.style.display = 'inline-block';
+        }
+
+        async function saveData(game, name, score, elapsedTime) {
+            const FUNCTION_URL = "https://us-central1-record-f420d.cloudfunctions.net/report";
+
+            const requestData = {
+                game,
+                name,
+                score: parseInt(score, 10),
+                elapsedTime: parseInt(elapsedTime, 10)
+            };
+
+            try {
+                const response = await fetch(FUNCTION_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                const responseData = await response.json();
+
+                if (response.ok) {
+                    document.getElementById('response').innerText =
+                        `성공: ${JSON.stringify(responseData, null, 2)}`;
+                } else {
+                    document.getElementById('response').innerText =
+                        `오류: ${JSON.stringify(responseData, null, 2)}`;
+                }
+            } catch (error) {
+                console.error('요청 실패:', error);
+                document.getElementById('response').innerText =
+                    `네트워크 오류: ${error.message}`;
+            }
+        }
+    </script>
+
+</body>
+</html>
